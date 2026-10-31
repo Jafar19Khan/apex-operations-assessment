@@ -1,0 +1,20 @@
+﻿groups:
+  - name: apex-operations-alerts
+    rules:
+      - alert: ApexApiUnavailable
+        expr: up{job="apex-operations-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Apex Operations API is unavailable
+          description: Prometheus cannot scrape the API metrics endpoint.
+
+      - alert: ApexApiHighRequestRate
+        expr: sum(rate(apex_api_requests_total[5m])) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: API request rate is unusually high
+          description: API request rate exceeded 100 requests per second for 5 minutes.
