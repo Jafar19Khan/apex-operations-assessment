@@ -1,4 +1,4 @@
-﻿# Apex Operations DevOps Assessment — Evidence Pack
+# Apex Operations DevOps Assessment — Evidence Pack
 
 The following screenshots document the local Jenkins CI pipeline, Docker deployment, API verification, rollback and failure-gate demonstration.
 

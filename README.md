@@ -1,59 +1,99 @@
-# Apex Operations API — Junior DevOps Assessment
+# Apex Operations API
 
-A minimal Flask API with PostgreSQL, Docker Compose, Jenkins CI, automated checks, health/readiness endpoints and Prometheus-format metrics.
+Small Flask API backed by PostgreSQL. The project is set up to run locally with Docker Compose and to run linting, tests and an image build through Jenkins.
 
-## Requirements
-Windows PowerShell, Git and Docker Desktop using Linux containers. No AWS account or paid cloud service is required for this local assessment.
+## What is included
 
-## Start locally
+- Flask API with `/health`, `/ready`, `/items` and `/metrics` endpoints
+- PostgreSQL database with a named volume
+- Docker image that runs the API as a non-root user
+- Compose health checks for the database and API
+- Jenkins pipeline for linting, tests and image build
+- Versioned image deployment and rollback instructions in `docs/rollback.md`
+
+This is a local assessment project. It does not include a cloud deployment or a running Prometheus server.
+
+## Run it locally
+
+Requirements: Git, PowerShell and Docker Desktop running Linux containers.
+
 ```powershell
 Copy-Item .env.example .env
 notepad .env
-# Replace the placeholder with a strong local-only password; never commit .env.
 docker compose config --quiet
 docker compose up -d --build
 docker compose ps
 ```
-Wait for DB and API to become healthy.
 
-## Verify live API
+Set `POSTGRES_PASSWORD` in `.env` to a strong password made of letters, numbers, and hyphens. Keeping it to those characters avoids URL-encoding issues in the local `DATABASE_URL`. Do not commit `.env`.
+
+Wait until the API and database report healthy, then check the endpoints:
+
 ```powershell
 Invoke-RestMethod http://localhost:8000/health
 Invoke-RestMethod http://localhost:8000/ready
 Invoke-RestMethod http://localhost:8000/items
+```
+
+Create a sample item:
+
+```powershell
 $body = @{ name = 'Assessment demo item' } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Uri http://localhost:8000/items -ContentType 'application/json' -Body $body
 Invoke-RestMethod http://localhost:8000/items
 ```
-Metrics: `http://localhost:8000/metrics`.
 
-## Local checks
+Metrics are available at `http://localhost:8000/metrics`. This endpoint exposes Prometheus-format data; the repository includes example scrape and alert-rule files, but no Prometheus server or alert receiver is started by Compose.
+
+## Run checks
+
+The CI Dockerfile installs the project requirements, runs Ruff and executes the regular test suite:
+
 ```powershell
-docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.12-slim sh -c "pip install -r requirements.txt && ruff check app tests && python -m pytest -q"
+docker build -f Dockerfile.ci -t apex-operations-ci:local .
 ```
-The default test suite excludes a separately marked intentional-failure test. Demonstrate the negative test gate with this expected-to-fail command:
+
+The normal suite excludes one deliberately failing test used for the CI failure-gate demonstration. To run that test separately, the command is expected to return a failure:
+
 ```powershell
 docker run --rm -v "${PWD}:/workspace" -w /workspace python:3.12-slim sh -c "pip install -r requirements.txt && python -m pytest -q -m intentional_failure"
 ```
 
-## Jenkins CI
-Push this repository to GitHub first. Start Jenkins:
+Do not treat the expected failure as a defect in the normal test run.
+
+## Jenkins
+
+Start the optional Jenkins service:
+
 ```powershell
 docker compose --profile ci up -d --build jenkins
 docker compose --profile ci exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
-Open `http://localhost:8081`, complete setup and install suggested plugins (Pipeline and Git). Create **New Item → Pipeline**. Select **Pipeline script from SCM**, Git, your repository URL, branch `*/main`, script path `Jenkinsfile`; save and Build Now. Pipeline runs checkout, Ruff, pytest and Docker image build. Jenkins uses the local Docker socket; this is privileged and for isolated local assessment use only.
 
-## Rollback and operations
-Follow `docs/rollback.md` for the exact PowerShell commands to build versioned image tags, deploy a release and roll back to the previous tag. Verify `/health` and `/ready`; do not claim rollback until actually demonstrated and evidenced.
+Open `http://localhost:8081`, complete the initial setup, then create a Pipeline job using **Pipeline script from SCM**. Select Git, enter this repository URL, set the branch to `*/main`, and use `Jenkinsfile` as the script path.
 
-## Stop
+The Jenkins container mounts the host Docker socket so it can build images. Access to that socket is effectively privileged. Keep this Jenkins instance local and do not expose it to an untrusted network.
+
+## Release and rollback
+
+Use the versioned image commands in `docs/rollback.md`. Keep the previous known-good image tag available locally. After deploying or rolling back, check both `/health` and `/ready`.
+
+## Stop the services
+
 ```powershell
-docker compose down
-# To also delete persisted demo DB data:
-docker compose down -v
 docker compose --profile ci down
 ```
 
-## Architecture and limitations
-PowerShell/browser -> API on loopback port 8000 -> PostgreSQL on private Compose network with named volume. GitHub source -> Jenkins -> Ruff/pytest -> Docker build. `/metrics` is Prometheus exposition format; no Prometheus server, scrape configuration or alert receiver is included. The API logs to container stdout/stderr. This is a local assessment demo, not a production customer-data service. Complete `AI_DISCLOSURE.md` accurately and save only real execution evidence under `evidence/`.
+The database volume is retained. To remove the local database data as well:
+
+```powershell
+docker compose --profile ci down -v
+```
+
+## Notes
+
+- PostgreSQL is not published on a host port; the API reaches it over the Compose network.
+- The API is published on `127.0.0.1:8000`.
+- `/health` checks that the API process responds. `/ready` also checks the database.
+- The API writes logs to standard output/error so they can be read with `docker compose logs`.
+- Complete `AI_DISCLOSURE.md` honestly to reflect the assistance used and the work you personally reviewed and ran.
