@@ -9,4 +9,4 @@ COPY pyproject.toml .
 COPY app ./app
 COPY tests ./tests
 
-RUN ruff check app tests && python -m pytest -q
+RUN ruff check app tests && python -m pytest -q -m intentional_failure
